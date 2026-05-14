@@ -1,6 +1,6 @@
 {
   "name": "gemini",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Use Gemini from Claude Code to research, augment knowledge, and search with citations.",
   "author": {
     "name": "mrlong0129"

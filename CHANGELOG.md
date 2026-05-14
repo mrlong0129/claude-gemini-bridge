@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.0 — 2026-05-14
+
+Second round of Codex sandbox fixes (see `outputs/codexgemini/第二次反馈.md`).
+
+- **Fix (P0)**: Exit code on timeout is now `124` (GNU `timeout` convention), not `0`. Previously, when Gemini was killed by SIGTERM and its `close` event reported `code=null`, callers could mis-interpret the result as success. Bridge now explicitly returns `124` and discards any partial output (no file written).
+- **Fix (P0)**: On timeout, partial stdout is no longer written to disk — it's emitted to stdout with a `(partial output above; treated as failure)` marker. Reasoning: a half-finished research markdown landing in `gemini-research/` was worse than nothing.
+- **Fix (P0)**: Explicit non-zero exit on any Gemini failure (`code !== 0`), instead of returning whatever `child.exit` reported. File write failures also return `1`.
+- **Fix (P1, yominos preset)**: Bridge now post-validates the generated frontmatter. If `attention.ai` is not a 0-5 integer (e.g. the model left the placeholder `<0-5 你基于本研究...>` untouched), bridge replaces it with `2` and prints a warning. Deterministic regardless of how well the model follows the prompt.
+- **Docs**: README + Codex `SKILL.md` now flag that Gemini CLI auth opens a browser, which Codex sandbox blocks. Solution: authenticate `gemini` from a normal terminal first, or set `GEMINI_API_KEY`.
+
+Exit code reference:
+- `0` success
+- `1` file write failure or generic non-zero from Gemini
+- `2` argument / sandbox / internal error
+- `124` timeout (matches GNU `timeout`)
+- `127` Gemini CLI not installed
+
+No breaking changes for happy-path callers.
+
 ## v0.3.0 — 2026-05-14
 
 Robustness fixes from a Codex sandbox e2e review.

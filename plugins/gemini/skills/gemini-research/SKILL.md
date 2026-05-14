@@ -28,6 +28,8 @@ gemini  # first run triggers auth flow
 
 If Gemini is not available, **stop and tell the user** to install + authenticate. Do not attempt to complete research without it.
 
+**Sandbox caveat**: Codex sandbox may not have network/browser access. If you see `Opening authentication page in your browser. Do you want to continue?` in stderr, Gemini is trying to do interactive auth and will hang. Tell the user to run `gemini` once from a normal terminal to complete auth, or set `GEMINI_API_KEY` in the environment, then retry. Do not loop on this.
+
 ---
 
 ## Three Modes
@@ -101,12 +103,13 @@ If the bridge wrote a file, append one short line at the end:
 
 ### Step 5: Error handling
 
-| Bridge output | Your action |
-|---|---|
-| `Gemini CLI not found` | Tell user to `npm install -g @google/gemini-cli && gemini`. Do not retry. |
-| `timeout after <N>s` | Suggest `--timeout <larger>` or narrow the task. Do not retry. |
-| `escapes project root` | The user's path is outside the project sandbox. Surface the error. |
-| Non-zero exit, other | Return stderr as-is. Do not guess root cause. |
+| Bridge output | Exit code | Your action |
+|---|---|---|
+| `Gemini CLI not found` | 127 | Tell user to `npm install -g @google/gemini-cli && gemini`. Do not retry. |
+| `Opening authentication page...` | 124 (after timeout) | Sandbox blocked auth. Tell user to run `gemini` once from a normal terminal, or set `GEMINI_API_KEY`. Do not retry. |
+| `timeout after <N>s` | 124 | Suggest `--timeout <larger>` or narrow the task. Do not retry. |
+| `escapes project root` | 2 | The user's path is outside the project sandbox. Surface the error. |
+| Non-zero exit, other | passthrough | Return stderr as-is. Do not guess root cause. |
 
 ---
 

@@ -49,6 +49,8 @@ npm install -g @google/gemini-cli
 gemini  # first run triggers auth
 ```
 
+> **Sandbox note**: First-time `gemini` auth opens a browser. If Codex (or any agent runtime) runs this plugin in a network/browser-restricted sandbox, you'll see `Opening authentication page in your browser. Do you want to continue?` and the call will hang. Authenticate `gemini` from a normal terminal **before** invoking the plugin from inside Codex sandbox. For headless/CI usage, set `GEMINI_API_KEY` in the environment instead.
+
 ---
 
 ## Usage

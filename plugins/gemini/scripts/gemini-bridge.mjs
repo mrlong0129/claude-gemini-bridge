@@ -492,9 +492,7 @@ async function mainInner(argv) {
 
   const result = await runGemini({ args: geminiArgs, timeoutSec: parsed.timeoutSec });
 
-  if (result.timedOut) {
-    process.stderr.write(`\n[gemini-bridge] timeout after ${parsed.timeoutSec}s\n`);
-  }
+  // ENOENT (gemini CLI missing) — diagnose and bail.
   if (result.error && result.error.code === "ENOENT") {
     process.stderr.write(
       "Gemini CLI not found. Install: npm install -g @google/gemini-cli (or: brew install gemini-cli)\n"
@@ -502,21 +500,42 @@ async function mainInner(argv) {
     return 127;
   }
 
-  // stderr policy: pass through on failure / timeout / --show-warnings; otherwise collapse to one line.
-  const stderrTrimmed = (result.stderr || "").replace(/\s+$/, "");
-  const stderrLineCount = stderrTrimmed ? stderrTrimmed.split("\n").length : 0;
-  if (stderrLineCount > 0) {
-    const failed = result.code !== 0 || result.timedOut;
+  // Helper: emit stderr respecting --show-warnings policy.
+  const emitStderr = ({ failed }) => {
+    const trimmed = (result.stderr || "").replace(/\s+$/, "");
+    if (!trimmed) return;
+    const lineCount = trimmed.split("\n").length;
     if (failed || parsed.showWarnings) {
-      process.stderr.write(stderrTrimmed + "\n");
+      process.stderr.write(trimmed + "\n");
     } else {
       process.stderr.write(
-        `[gemini-bridge] gemini emitted ${stderrLineCount} stderr line(s); rerun with --show-warnings to view\n`
+        `[gemini-bridge] gemini emitted ${lineCount} stderr line(s); rerun with --show-warnings to view\n`
       );
     }
+  };
+
+  // Timeout — exit early with 124 (GNU timeout convention).
+  // Do NOT write the partial output to file: it's almost certainly incomplete or corrupt.
+  if (result.timedOut) {
+    process.stderr.write(`\n[gemini-bridge] timeout after ${parsed.timeoutSec}s — output discarded (no file written)\n`);
+    emitStderr({ failed: true });
+    if (result.stdout) {
+      process.stdout.write(result.stdout);
+      process.stdout.write("\n[gemini-bridge] (partial output above; treated as failure)\n");
+    }
+    return 124;
   }
 
-  const body = result.stdout;
+  emitStderr({ failed: result.code !== 0 });
+
+  // Non-zero gemini exit — surface error, no file write.
+  if (result.code !== 0) {
+    if (result.stdout) process.stdout.write(result.stdout);
+    return result.code || 1;
+  }
+
+  // Success path — sanitize body, then optionally write to file.
+  const body = sanitizeBody(result.stdout, parsed);
 
   // Default output-file behavior:
   //   research → <outputDir>/[AI]_<topic>_<date>.md
@@ -543,12 +562,38 @@ async function mainInner(argv) {
     } catch (err) {
       process.stderr.write(`\n[gemini-bridge] failed to write ${outFile}: ${err.message}\n`);
       process.stdout.write(body);
+      return 1;
     }
   } else {
     process.stdout.write(body);
   }
 
-  return result.code;
+  return 0;
+}
+
+// Body sanitizers — deterministic fixups so we don't rely solely on the model
+// following the prompt format. Currently:
+//   - yominos preset: replace `attention.ai: <placeholder>` with a valid 0-5 int
+export function sanitizeBody(body, parsed) {
+  if (!body) return body;
+  if (parsed.frontmatterPreset !== "yominos") return body;
+
+  // Match the `attention:\n  ai: <value>` block at the top of the file.
+  // The frontmatter block is bounded by `---` lines; we only touch the first one.
+  const fmMatch = body.match(/^---\n([\s\S]*?)\n---/);
+  if (!fmMatch) return body;
+  const fmBlock = fmMatch[1];
+
+  const aiMatch = fmBlock.match(/(^|\n)(\s*ai:\s*)([^\n]*)/);
+  if (!aiMatch) return body;
+  const aiValue = aiMatch[3].trim();
+  if (/^[0-5]$/.test(aiValue)) return body; // valid
+
+  process.stderr.write(
+    `[gemini-bridge] attention.ai was "${aiValue}" — not a valid 0-5 integer; falling back to 2\n`
+  );
+  const fixedFmBlock = fmBlock.replace(/(^|\n)(\s*ai:\s*)([^\n]*)/, "$1$22");
+  return body.replace(fmBlock, fixedFmBlock);
 }
 
 export async function main(argv = process.argv.slice(2)) {
