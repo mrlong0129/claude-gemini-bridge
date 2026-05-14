@@ -1,0 +1,20 @@
+{
+  "name": "claude-gemini-bridge",
+  "interface": {
+    "displayName": "Gemini Research"
+  },
+  "plugins": [
+    {
+      "name": "gemini",
+      "source": {
+        "source": "local",
+        "path": "./plugins/gemini"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "NONE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
