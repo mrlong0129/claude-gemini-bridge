@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.0 — 2026-05-14
+
+Optimizations now that Codex sandbox v0.4.0 review confirmed all P0/P1 fixes are stable. Premise: users have Gemini CLI installed + authenticated locally.
+
+- **Drop preflight `gemini --version`** in the Codex `SKILL.md`. The check was wasteful (one shell turn per task) — the bridge's `ENOENT → exit 127` is the safety net. Saves a shell round-trip per Codex call.
+- **Env-var overrides** for project-wide defaults:
+  - `GEMINI_BRIDGE_OUTPUT_DIR` — overrides research `--output-dir`. YominOS users can set `know-how` once and `/gemini research --domain ai ...` lands at `know-how/ai/[AI]_*.md`.
+  - `GEMINI_BRIDGE_FRONTMATTER_PRESET` — overrides `--frontmatter-preset`. Set to `yominos` once and every research call uses YominOS frontmatter.
+  - CLI flags still win.
+- **Reorder error tables** in both `agents/gemini-research-assistant.md` (Claude) and `skills/gemini-research/SKILL.md` (Codex) by real-world frequency. Timeout / sandbox auth at the top; `Gemini CLI not found` demoted to the bottom with a "rare" marker (because users have it installed).
+- README env-var table now documents all three (`PROJECT_ROOT`, `OUTPUT_DIR`, `FRONTMATTER_PRESET`).
+
+No behavior change for users without env vars set. Bridge contract unchanged.
+
 ## v0.4.0 — 2026-05-14
 
 Second round of Codex sandbox fixes (see `outputs/codexgemini/第二次反馈.md`).

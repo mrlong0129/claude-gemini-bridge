@@ -125,12 +125,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-bridge.mjs" --mode <mode> [options] -
 
 ### Step 5：错误处理
 
-| Bridge 输出 | 你的动作 |
-|------------|---------|
-| `Gemini CLI not found` | 告诉用户：`npm install -g @google/gemini-cli && gemini auth`，不重试 |
-| `timeout after <N>s` | 建议用户加 `--timeout` 或缩小 task 范围，不重试 |
-| `escapes project root` | 用户给的路径跑出项目了，提示并停 |
-| 其它非 0 退出码 | 原样返回 stderr，不猜原因 |
+按出现频率排，假设用户**本地已装且已 auth Gemini CLI**：
+
+| Bridge 输出 | Exit code | 你的动作 |
+|------------|---|---------|
+| `timeout after <N>s` | 124 | 建议用户加 `--timeout <larger>` 或缩小 task 范围。**不重试** |
+| `Opening authentication page...` 后 timeout | 124 | sandbox 拦截了浏览器 auth。让用户在普通 terminal 跑 `gemini` 完成 auth，或设 `GEMINI_API_KEY`。**不重试** |
+| `escapes project root` | 2 | 用户给的路径跑出项目沙盒了，提示并停 |
+| `failed to write ...` | 1 | 文件系统写失败（权限/磁盘满），把 stderr 告诉用户 |
+| 其它非 0 退出码 | passthrough | 原样返回 stderr，不猜原因 |
+| `Gemini CLI not found` | 127 | **罕见**（前提是用户本地已装）。告诉用户 `npm install -g @google/gemini-cli && gemini` 后重试 |
 
 ---
 

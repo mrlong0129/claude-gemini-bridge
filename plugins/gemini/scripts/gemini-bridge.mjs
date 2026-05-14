@@ -26,6 +26,11 @@ const PROJECT_ROOT = process.env.GEMINI_BRIDGE_PROJECT_ROOT
   ? path.resolve(process.env.GEMINI_BRIDGE_PROJECT_ROOT)
   : process.cwd();
 
+// Env-var overrides let users pin project-wide defaults (e.g. in a YominOS
+// repo's .envrc) without passing the same flags every call. CLI flags still win.
+const ENV_FRONTMATTER_PRESET = process.env.GEMINI_BRIDGE_FRONTMATTER_PRESET;
+const ENV_OUTPUT_DIR = process.env.GEMINI_BRIDGE_OUTPUT_DIR;
+
 const DEFAULTS = {
   // Gemini 3.1 Pro Preview — latest flagship as of 2026-04
   // Fallback order: gemini-3.1-pro-preview > gemini-3-pro-preview > gemini-2.5-pro
@@ -36,8 +41,12 @@ const DEFAULTS = {
   maxFileBytes: 64_000,
   outputFormat: "text",
   // Default research output directory (relative to PROJECT_ROOT).
-  // Override with --output-dir or --output-file.
-  researchOutputDir: "gemini-research",
+  // Override priority: --output-dir flag > GEMINI_BRIDGE_OUTPUT_DIR env > this default.
+  researchOutputDir: ENV_OUTPUT_DIR || "gemini-research",
+  // Frontmatter preset. Override priority: --frontmatter-preset flag > GEMINI_BRIDGE_FRONTMATTER_PRESET env > "default".
+  frontmatterPreset: (ENV_FRONTMATTER_PRESET === "yominos" || ENV_FRONTMATTER_PRESET === "default")
+    ? ENV_FRONTMATTER_PRESET
+    : "default",
 };
 
 const BINARY_EXT = new Set([
@@ -91,8 +100,10 @@ Output:
 Diagnostics:
   --show-warnings            Print Gemini CLI stderr even on success (default: silent on success)
 
-Environment:
-  GEMINI_BRIDGE_PROJECT_ROOT   Override project root (default: process.cwd())
+Environment (project-wide defaults, CLI flags override):
+  GEMINI_BRIDGE_PROJECT_ROOT       Override project root (default: process.cwd())
+  GEMINI_BRIDGE_OUTPUT_DIR         Override research --output-dir (e.g. "know-how" for YominOS)
+  GEMINI_BRIDGE_FRONTMATTER_PRESET Override --frontmatter-preset ("default" | "yominos")
 
 Examples:
   node gemini-bridge.mjs --mode ask "Amazon 2026 Q1 新政策"
@@ -142,7 +153,7 @@ export function parseArgs(argv) {
     outputFile: undefined,
     noOutputFile: false,
     showWarnings: false,
-    frontmatterPreset: "default",
+    frontmatterPreset: DEFAULTS.frontmatterPreset,
     help: false,
   };
 

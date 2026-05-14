@@ -148,9 +148,13 @@ claude-gemini-bridge/
 
 ## Configuration
 
+CLI flags always win. Use env vars to pin project-wide defaults (e.g. in a YominOS repo's `.envrc`, in `direnv`, or your shell rc).
+
 | Env var | Default | Purpose |
 |---|---|---|
-| `GEMINI_BRIDGE_PROJECT_ROOT` | `process.cwd()` | Override project root (where output + baseline globs resolve) |
+| `GEMINI_BRIDGE_PROJECT_ROOT` | `process.cwd()` | Project root (where output files + baseline globs resolve) |
+| `GEMINI_BRIDGE_OUTPUT_DIR` | `gemini-research` | Default `--output-dir` for research mode (e.g. set to `know-how` for YominOS workflow) |
+| `GEMINI_BRIDGE_FRONTMATTER_PRESET` | `default` | Default `--frontmatter-preset` for research mode (`default` \| `yominos`) |
 
 CLI flags (see `node gemini-bridge.mjs --help`):
 

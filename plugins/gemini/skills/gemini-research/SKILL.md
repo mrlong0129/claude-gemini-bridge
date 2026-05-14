@@ -13,22 +13,9 @@ This skill is for **breadth × knowledge** — pair it with Codex's native depth
 
 ## Prerequisites
 
-The Gemini CLI must be installed and authenticated:
+Assume the user has Gemini CLI installed and authenticated locally (`npm install -g @google/gemini-cli` + `gemini` to auth). **Do not run `gemini --version` as a preflight check** — it wastes a shell turn. If Gemini is actually missing, the bridge will exit 127 with a clear `Gemini CLI not found` message; surface that to the user only if it happens.
 
-```bash
-gemini --version  # should print a version
-```
-
-If not installed:
-
-```bash
-npm install -g @google/gemini-cli
-gemini  # first run triggers auth flow
-```
-
-If Gemini is not available, **stop and tell the user** to install + authenticate. Do not attempt to complete research without it.
-
-**Sandbox caveat**: Codex sandbox may not have network/browser access. If you see `Opening authentication page in your browser. Do you want to continue?` in stderr, Gemini is trying to do interactive auth and will hang. Tell the user to run `gemini` once from a normal terminal to complete auth, or set `GEMINI_API_KEY` in the environment, then retry. Do not loop on this.
+**Sandbox caveat**: Codex sandbox blocks Gemini CLI's browser auth flow. If you see `Opening authentication page in your browser. Do you want to continue?` in stderr (typically followed by a `timeout after Ns` and exit 124), the user needs to either authenticate `gemini` from a normal terminal once, or set `GEMINI_API_KEY` in the environment. Surface this and stop — do not retry.
 
 ---
 
@@ -103,13 +90,16 @@ If the bridge wrote a file, append one short line at the end:
 
 ### Step 5: Error handling
 
+Ordered by real-world frequency (assumes user has Gemini CLI installed locally):
+
 | Bridge output | Exit code | Your action |
 |---|---|---|
-| `Gemini CLI not found` | 127 | Tell user to `npm install -g @google/gemini-cli && gemini`. Do not retry. |
-| `Opening authentication page...` | 124 (after timeout) | Sandbox blocked auth. Tell user to run `gemini` once from a normal terminal, or set `GEMINI_API_KEY`. Do not retry. |
 | `timeout after <N>s` | 124 | Suggest `--timeout <larger>` or narrow the task. Do not retry. |
+| `Opening authentication page...` then timeout | 124 | Sandbox blocked browser auth. Tell user to run `gemini` once from a normal terminal, or set `GEMINI_API_KEY`. Do not retry. |
 | `escapes project root` | 2 | The user's path is outside the project sandbox. Surface the error. |
+| `failed to write ...` | 1 | Filesystem write failed (permission/disk). Surface stderr to user. |
 | Non-zero exit, other | passthrough | Return stderr as-is. Do not guess root cause. |
+| `Gemini CLI not found` | 127 | **Rare** (assumes user has it installed). Tell user to `npm install -g @google/gemini-cli && gemini`. |
 
 ---
 
