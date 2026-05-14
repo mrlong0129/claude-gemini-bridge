@@ -1,0 +1,22 @@
+{
+  "name": "gemini-research",
+  "owner": {
+    "name": "mrlong0129",
+    "url": "https://github.com/mrlong0129"
+  },
+  "metadata": {
+    "description": "Bring Gemini's long context + Google Search grounding into Claude Code as a research assistant. Built for cross-border e-commerce / Amazon operators.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "gemini-research",
+      "description": "Delegate research, know-how augmentation, and industry insight queries to Gemini. Pairs with @openai/codex (codex = deep code, gemini = broad knowledge).",
+      "version": "0.1.0",
+      "author": {
+        "name": "mrlong0129"
+      },
+      "source": "./plugins/gemini-research"
+    }
+  ]
+}

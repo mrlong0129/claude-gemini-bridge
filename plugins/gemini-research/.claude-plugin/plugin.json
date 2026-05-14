@@ -1,0 +1,18 @@
+{
+  "name": "gemini-research",
+  "version": "0.1.0",
+  "description": "Delegate research, know-how augmentation, and industry insight queries to Gemini from inside Claude Code.",
+  "author": {
+    "name": "mrlong0129",
+    "url": "https://github.com/mrlong0129"
+  },
+  "homepage": "https://github.com/mrlong0129/gemini-research",
+  "license": "MIT",
+  "keywords": [
+    "gemini",
+    "research",
+    "amazon",
+    "cross-border-ecommerce",
+    "claude-code-plugin"
+  ]
+}

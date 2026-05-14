@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+.env
+.env.*
+# research mode output dir (only at user-project root, not in plugin source)
+/gemini-research/
+*.augmented.md
