@@ -12,3 +12,5 @@ Initial release.
 - Default augment output: `<file>.augmented.md`
 - `--plan` dry-run support
 - Prompts tuned for cross-border e-commerce / Amazon research (citations, no hallucination, terminology preservation)
+
+Pairs with `@openai/codex` — codex handles depth × code, this plugin handles breadth × knowledge.

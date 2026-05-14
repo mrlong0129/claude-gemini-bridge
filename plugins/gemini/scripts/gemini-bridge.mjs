@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gemini-research plugin — Gemini Bridge
+// claude-gemini-bridge — Gemini Bridge
 // Thin executor that wraps `gemini -p ...` with:
 //   - mode-aware prompt templates (ask / research / augment)
 //   - baseline file injection (read from user's project cwd)
@@ -52,7 +52,7 @@ const IGNORED_SEGMENTS = new Set([
   "archive", ".claude/plugins", "out",
 ]);
 
-const USAGE = `gemini-research Bridge
+const USAGE = `claude-gemini-bridge — Gemini Bridge
 
 Usage:
   node gemini-bridge.mjs --mode <ask|research|augment> [options] <task>

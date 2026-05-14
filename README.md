@@ -1,35 +1,40 @@
-# gemini-research
+# claude-gemini-bridge
 
-A Claude Code plugin that delegates **research / know-how augmentation / industry insight queries** to Google Gemini — long context + Google Search grounding, with cited sources.
+A Claude Code plugin that brings **Google Gemini** into your terminal — long context + Google Search grounding, with cited sources.
 
-Built for **cross-border e-commerce / Amazon operators**, but works for any domain where you want a research-grade Gemini call from inside Claude Code.
+Use it to delegate research, augment your knowledge base, and answer industry questions without leaving Claude Code.
 
 **Pairs with** [`openai-codex`](https://github.com/openai/codex):
-- `codex` = depth × code (rescue, deep debug, second implementation)
-- `gemini-research` = breadth × knowledge (research, know-how augmentation, citations)
+
+| | `codex` | `gemini` (this plugin) |
+|---|---|---|
+| Strength | Depth × code | Breadth × knowledge |
+| Use for | Rescue stuck implementations, deep debug, second-pass review | Research, knowledge augmentation, industry insight with citations |
+| Output | Code changes | Structured markdown + source links |
+
+Built with **cross-border e-commerce / Amazon** workflows in mind — prompts preserve domain terminology (ACOS, ASIN, ROAS, BSR, AMC, etc.) and enforce source citations.
 
 ---
 
 ## Install
 
-```bash
-# In Claude Code:
-/plugin marketplace add mrlong0129/gemini-research
-/plugin install gemini-research@gemini-research
+```
+/plugin marketplace add mrlong0129/claude-gemini-bridge
+/plugin install gemini@claude-gemini-bridge
 ```
 
-Then make sure the Gemini CLI is installed and authenticated:
+Make sure the Gemini CLI is installed and authenticated:
 
 ```bash
 npm install -g @google/gemini-cli
-gemini  # follow the auth flow on first run
+gemini  # first run triggers auth
 ```
 
 ---
 
 ## Usage
 
-Three modes, one slash command:
+One slash command, three modes:
 
 ### `/gemini ask` — quick Q&A with sources
 
@@ -47,11 +52,11 @@ Returns a direct answer with `[1] [2] ...` source links. Stdout only.
 
 The agent will:
 1. Detect the mode (`research`)
-2. Scan your project for related existing knowledge (`know-how/`, `docs/`, etc.) as **baseline**
+2. Scan your project for related existing docs (`know-how/`, `docs/`, etc.) as **baseline context**
 3. Call Gemini with: task + baseline + structured output format
 4. Write the result to `./gemini-research/{domain}/[AI]_<slug>_<date>.md`
 
-The output is **delta-focused** — Gemini sees what you already know and only adds new info.
+Output is **delta-focused** — Gemini sees what you already know and only adds new info.
 
 ### `/gemini augment` — update an existing doc with delta
 
@@ -76,7 +81,7 @@ User
  │
  │  /gemini ...
  ▼
-Claude Code command (commands/gemini.md)
+Slash command (commands/gemini.md)
  │
  │  routes to subagent
  ▼
@@ -97,7 +102,7 @@ Gemini CLI (`@google/gemini-cli`) — long context + Search grounding
 
 The bridge:
 - Sandboxes all file reads/writes to `process.cwd()` (your project root)
-- Uses `spawn` array-mode (no shell) — argv safe
+- Uses `spawn` array-mode (no shell) — argv-safe
 - Times out (180s default, 420s for research)
 - Supports `--plan` dry-run to inspect the resolved prompt before execution
 
@@ -130,7 +135,7 @@ CLI flags (see `node gemini-bridge.mjs --help`):
 
 ## Prompts
 
-The prompt templates live in [`plugins/gemini-research/scripts/lib/gemini-prompts.mjs`](plugins/gemini-research/scripts/lib/gemini-prompts.mjs) and are tuned for:
+Prompt templates live in [`plugins/gemini/scripts/lib/gemini-prompts.mjs`](plugins/gemini/scripts/lib/gemini-prompts.mjs) and are tuned for:
 
 - **Citations**: every non-trivial claim must have a source URL
 - **No hallucination**: if unknown, Gemini is told to say "unknown" instead of inventing
@@ -138,7 +143,7 @@ The prompt templates live in [`plugins/gemini-research/scripts/lib/gemini-prompt
 - **Bilingual**: Chinese task → Chinese reply; English task → English reply
 - **Delta-focused** (research/augment): baseline-aware, only adds new info
 
-If you want to tune for a different domain (e.g. legal research, fintech), fork and edit `gemini-prompts.mjs` — the rest of the pipeline is domain-neutral.
+Fork and edit `gemini-prompts.mjs` if you want to tune for a different domain — the rest of the pipeline is domain-neutral.
 
 ---
 
@@ -158,5 +163,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Credits
 
-- Architecture inspired by [`openai-codex`](https://github.com/openai/codex) plugin (same `${CLAUDE_PLUGIN_ROOT}` pattern, command/agent/bridge layering).
-- Built for the cross-border e-commerce community.
+Architecture inspired by [`openai-codex`](https://github.com/openai/codex) plugin (same `${CLAUDE_PLUGIN_ROOT}` pattern, command/agent/bridge layering). Built for the cross-border e-commerce community.
