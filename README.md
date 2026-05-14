@@ -163,9 +163,11 @@ CLI flags (see `node gemini-bridge.mjs --help`):
 | `--output-dir` | `gemini-research` | Output directory for research mode |
 | `--output-file` | _(auto)_ | Explicit output file path |
 | `--no-output-file` | `false` | Disable file writing (stdout only) |
-| `--timeout` | 180s (ask/augment), 420s (research) | Hard timeout |
+| `--timeout` | 180s (ask/augment), 420s (research) | Hard timeout (kills the whole gemini process group, with a 7s fallback resolve if `close` never fires — important in sandboxed runtimes like Codex) |
 | `--plan` | `false` | Dry-run: print resolved prompt + command, do not execute |
 | `--print-prompt` | `false` | Print prompt to stderr before execution |
+| `--show-warnings` | `false` | Pass Gemini CLI stderr through on success (default: collapse to one-line summary) |
+| `--frontmatter-preset` | `default` | Frontmatter template for research mode. `default` = minimal `created/source/tool/domain`. `yominos` = `attention.ai` + `attention.yomin` block matching YominOS convention. |
 
 ---
 

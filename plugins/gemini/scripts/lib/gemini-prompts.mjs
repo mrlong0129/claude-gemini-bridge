@@ -69,9 +69,36 @@ ${task}
 
 // ---------- RESEARCH mode ----------
 // Deep research producing a structured knowledge-base draft.
-function researchPrompt({ task, baseline, domain, topic }) {
+function frontmatterTemplate(preset, date, domainLabel) {
+  if (preset === "yominos") {
+    // YominOS 体系：attention 评分 + 来源标注
+    return `---
+attention:
+  ai: <0-5 你基于本研究的质量自评，3=中等，4=高价值，5=反直觉/跨域验证>
+  yomin:
+created: ${date}
+source: ai
+tool: gemini
+domain: ${domainLabel}
+---`;
+  }
+  // default
+  return `---
+created: ${date}
+source: gemini
+tool: gemini
+domain: ${domainLabel}
+---`;
+}
+
+function researchPrompt({ task, baseline, domain, topic, preset }) {
   const date = TODAY();
   const domainLabel = domain || "（未指定，请推断）";
+  const frontmatter = frontmatterTemplate(preset || "default", date, domainLabel);
+  const presetHint =
+    preset === "yominos"
+      ? `\n  - frontmatter 中 attention.ai 必须替换为你对本次研究价值的实际评分 (0-5 整数)，参考标准：5=反直觉且跨案例验证，4=高价值可复用，3=中等参考价值，2=信息性内容，1=临时/可删除。`
+      : "";
 
   return `你是一名深度研究助手。用户是跨境电商行业的从业者（产品 / 运营 / 工程），需要在特定主题上获得深度、有来源、结构化的 know-how。
 
@@ -94,14 +121,9 @@ ${formatBaseline(baseline)}
 </baseline_knowhow>
 
 <output_format>
-严格按以下 Markdown 格式输出，这将直接写入用户的知识库文件：
+严格按以下 Markdown 格式输出，这将直接写入用户的知识库文件：${presetHint}
 
----
-created: ${date}
-source: gemini
-tool: gemini
-domain: ${domainLabel}
----
+${frontmatter}
 
 # {主题标题}
 
@@ -239,12 +261,12 @@ Augment 任务: ${task}
 
 // ---------- dispatcher ----------
 
-export function buildPrompt({ mode, task, baseline, augmentPath, augmentContent, domain, topic }) {
+export function buildPrompt({ mode, task, baseline, augmentPath, augmentContent, domain, topic, preset }) {
   switch (mode) {
     case "ask":
       return askPrompt({ task, baseline });
     case "research":
-      return researchPrompt({ task, baseline, domain, topic });
+      return researchPrompt({ task, baseline, domain, topic, preset });
     case "augment":
       return augmentPrompt({ task, baseline, augmentPath, augmentContent });
     default:

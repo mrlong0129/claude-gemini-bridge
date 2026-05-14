@@ -82,10 +82,14 @@ Research-specific:
   --domain <name>            Domain hint (amazon / ai / business / ...)
   --topic <slug>             Topic slug for filename (auto-derived if absent)
   --output-dir <path>        Directory for research output (default: ${DEFAULTS.researchOutputDir}/)
+  --frontmatter-preset <p>   Frontmatter template: default | yominos  (default: default)
 
 Output:
   --output-file <path>       Explicit output file (overrides --output-dir)
   --no-output-file           Disable file writing (stdout only)
+
+Diagnostics:
+  --show-warnings            Print Gemini CLI stderr even on success (default: silent on success)
 
 Environment:
   GEMINI_BRIDGE_PROJECT_ROOT   Override project root (default: process.cwd())
@@ -137,6 +141,8 @@ export function parseArgs(argv) {
     outputDir: DEFAULTS.researchOutputDir,
     outputFile: undefined,
     noOutputFile: false,
+    showWarnings: false,
+    frontmatterPreset: "default",
     help: false,
   };
 
@@ -223,6 +229,19 @@ export function parseArgs(argv) {
       case "--no-output-file":
         out.noOutputFile = true;
         break;
+      case "--show-warnings":
+        out.showWarnings = true;
+        break;
+      case "--frontmatter-preset": {
+        const v = takeValue(argv, i, t);
+        const allowed = ["default", "yominos"];
+        if (!allowed.includes(v)) {
+          throw new Error(`Invalid --frontmatter-preset "${v}". Expected one of: ${allowed.join(", ")}`);
+        }
+        out.frontmatterPreset = v;
+        i += 1;
+        break;
+      }
       default:
         taskTokens.push(t);
     }
@@ -328,9 +347,12 @@ async function collectFiles({ patterns, maxFiles, maxFileBytes }) {
 
 function runGemini({ args, timeoutSec }) {
   return new Promise((resolve) => {
+    // detached: true on POSIX so we get a new process group → can kill children too
+    const usePosixGroup = process.platform !== "win32";
     const child = spawn("gemini", args, {
       cwd: PROJECT_ROOT,
       shell: false,
+      detached: usePosixGroup,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -338,11 +360,42 @@ function runGemini({ args, timeoutSec }) {
     const out = [];
     const err = [];
     let timedOut = false;
+    let settled = false;
+    const settle = (payload) => {
+      if (settled) return;
+      settled = true;
+      resolve(payload);
+    };
+
+    const killTree = (sig) => {
+      try {
+        if (usePosixGroup && child.pid) {
+          // negative pid → kill the whole process group
+          process.kill(-child.pid, sig);
+        } else if (child.pid) {
+          child.kill(sig);
+        }
+      } catch (_) {
+        /* already dead */
+      }
+    };
 
     const to = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 5000).unref();
+      killTree("SIGTERM");
+      setTimeout(() => killTree("SIGKILL"), 5000).unref();
+      // Hard fallback: if 'close' never fires (sandbox-stuck pipes), force resolve.
+      setTimeout(() => {
+        settle({
+          code: -1,
+          stdout: Buffer.concat(out).toString("utf8"),
+          stderr:
+            Buffer.concat(err).toString("utf8") +
+            `\n[gemini-bridge] forced exit (child did not close after kill)\n`,
+          error: null,
+          timedOut: true,
+        });
+      }, 7000).unref();
     }, timeoutSec * 1000);
 
     child.stdout.on("data", (d) => out.push(d));
@@ -350,12 +403,12 @@ function runGemini({ args, timeoutSec }) {
 
     child.on("error", (e) => {
       clearTimeout(to);
-      resolve({ code: -1, stdout: "", stderr: e.message, error: e, timedOut: false });
+      settle({ code: -1, stdout: "", stderr: e.message, error: e, timedOut: false });
     });
 
     child.on("close", (code) => {
       clearTimeout(to);
-      resolve({
+      settle({
         code: code ?? -1,
         stdout: Buffer.concat(out).toString("utf8"),
         stderr: Buffer.concat(err).toString("utf8"),
@@ -414,6 +467,7 @@ async function mainInner(argv) {
     augmentContent,
     domain: parsed.domain,
     topic: parsed.topic,
+    preset: parsed.frontmatterPreset,
   });
 
   const geminiArgs = ["-p", prompt, "-m", parsed.model, "--output-format", parsed.outputFormat];
@@ -447,8 +501,19 @@ async function mainInner(argv) {
     );
     return 127;
   }
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
+
+  // stderr policy: pass through on failure / timeout / --show-warnings; otherwise collapse to one line.
+  const stderrTrimmed = (result.stderr || "").replace(/\s+$/, "");
+  const stderrLineCount = stderrTrimmed ? stderrTrimmed.split("\n").length : 0;
+  if (stderrLineCount > 0) {
+    const failed = result.code !== 0 || result.timedOut;
+    if (failed || parsed.showWarnings) {
+      process.stderr.write(stderrTrimmed + "\n");
+    } else {
+      process.stderr.write(
+        `[gemini-bridge] gemini emitted ${stderrLineCount} stderr line(s); rerun with --show-warnings to view\n`
+      );
+    }
   }
 
   const body = result.stdout;
