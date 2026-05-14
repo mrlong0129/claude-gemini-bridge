@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Gemini plugin for Claude Code: delegate research tasks, augment knowledge base, query industry insights with Google Search grounding.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "gemini",
       "description": "Use Gemini from Claude Code to research, augment knowledge, and search with citations.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "mrlong0129"
       },

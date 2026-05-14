@@ -29,8 +29,16 @@ Built with **cross-border e-commerce / Amazon** workflows in mind — prompts pr
 
 ```bash
 codex plugin marketplace add mrlong0129/claude-gemini-bridge
-codex plugin install gemini
 ```
+
+Then enable the plugin by adding the following to `~/.codex/config.toml`:
+
+```toml
+[plugins."gemini@claude-gemini-bridge"]
+enabled = true
+```
+
+The first time you run `codex` after enabling, the plugin is cached to `~/.codex/plugins/cache/claude-gemini-bridge/gemini/<version>/` and the `gemini-research` skill becomes available.
 
 ### Prerequisite (both)
 
