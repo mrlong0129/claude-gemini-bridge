@@ -1,21 +1,21 @@
 {
-  "name": "claude-gemini-bridge",
+  "name": "openagent-bridge",
   "owner": {
     "name": "mrlong0129"
   },
   "metadata": {
-    "description": "Gemini plugin for Claude Code: delegate research tasks, augment knowledge base, query industry insights with Google Search grounding.",
-    "version": "0.5.0"
+    "description": "Multi-backend bridge: delegate research, knowledge-base augmentation, and industry queries from Claude Code to external agent CLIs (Gemini, Antigravity).",
+    "version": "0.6.0"
   },
   "plugins": [
     {
-      "name": "gemini",
-      "description": "Use Gemini from Claude Code to research, augment knowledge, and search with citations.",
-      "version": "0.5.0",
+      "name": "bridge",
+      "description": "Use Gemini or Antigravity from Claude Code to research, augment knowledge, and search with citations.",
+      "version": "0.6.0",
       "author": {
         "name": "mrlong0129"
       },
-      "source": "./plugins/gemini"
+      "source": "./plugins/bridge"
     }
   ]
 }

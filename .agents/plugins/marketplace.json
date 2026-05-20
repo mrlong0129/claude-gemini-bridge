@@ -1,14 +1,14 @@
 {
-  "name": "claude-gemini-bridge",
+  "name": "openagent-bridge",
   "interface": {
-    "displayName": "Gemini Research"
+    "displayName": "Openagent Bridge"
   },
   "plugins": [
     {
-      "name": "gemini",
+      "name": "bridge",
       "source": {
         "source": "local",
-        "path": "./plugins/gemini"
+        "path": "./plugins/bridge"
       },
       "policy": {
         "installation": "AVAILABLE",

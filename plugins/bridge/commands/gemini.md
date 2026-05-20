@@ -4,10 +4,13 @@ argument-hint: "[ask|research|augment] [--domain <name>] [--file <path>] [--base
 allowed-tools: Bash(node:*), Read, Glob, Grep
 ---
 
-# /gemini — Research Assistant
+# /gemini — Research Assistant (Gemini backend)
 
-Route the user's request to the `gemini-research-assistant` subagent, which calls
-the Gemini CLI via `${CLAUDE_PLUGIN_ROOT}/scripts/gemini-bridge.mjs`.
+Route the user's request to the `bridge-research-assistant` subagent, which calls
+`${CLAUDE_PLUGIN_ROOT}/scripts/bridge.mjs` with `--backend gemini`.
+
+This is a convenience shortcut. For Antigravity, use `/antigravity` instead.
+For any backend with explicit override, use the subagent directly with `--backend`.
 
 ## 定位（与 codex 互补）
 
@@ -24,7 +27,7 @@ $ARGUMENTS
 ### 执行规则
 
 **步骤**：
-1. 将上述 raw 请求路由到 `gemini-research-assistant` subagent
+1. 将上述 raw 请求路由到 `bridge-research-assistant` subagent，**默认 `--backend gemini`**
 2. subagent 会：判断 mode → 加载 baseline → 调 bridge → 后处理
 3. subagent 的完整输出**原封不动**返回给用户，不要加任何前后 commentary
 
@@ -41,12 +44,13 @@ $ARGUMENTS
 ### Flag 透传
 
 以下 flag 传给 subagent（subagent 再传给 bridge）：
-- `--model <name>` — 默认 `gemini-3.1-pro-preview`
+- `--backend <name>` — 默认 `gemini`，可手动覆盖为 `antigravity`
+- `--model <name>` — 默认 `gemini-3.1-pro-preview`（gemini backend）
 - `--domain <name>` — research 模式的领域提示（`amazon` / `ai` / `business` / `product` / `market`）
 - `--topic <slug>` — research 模式的文件名 slug
 - `--file <path>` — augment 模式的目标文件
 - `--baseline <glob,...>` — 额外注入的上下文文件（ask/research 用）
-- `--output-dir <path>` — research 模式输出目录（默认 `./gemini-research/`）
+- `--output-dir <path>` — research 模式输出目录（默认 `./gemini-research/`，env `OPENAGENT_BRIDGE_OUTPUT_DIR` 也可设）
 - `--plan` — dry-run，只打印 prompt + 命令不执行（审计用）
 
 ### 输出位置

@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-// claude-gemini-bridge — Gemini Bridge
-// Thin executor that wraps `gemini -p ...` with:
+// openagent-bridge — Multi-backend bridge for Claude Code + Codex CLI.
+//
+// Wraps an external agent CLI (gemini, antigravity, ...) with:
 //   - mode-aware prompt templates (ask / research / augment)
 //   - baseline file injection (read from user's project cwd)
 //   - cwd sandbox (must stay under user's project root)
-//   - timeout, dry-run (--plan), print-prompt
+//   - timeout with process-group kill + 7s fallback resolve
+//   - dry-run (--plan), print-prompt
 //   - spawn in array mode (no shell), no env leakage
+//   - pluggable backends (see ./backends/*.mjs)
 
 import { spawn } from "node:child_process";
 import { globSync } from "node:fs";
@@ -14,39 +17,70 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { buildPrompt, MODES } from "./lib/gemini-prompts.mjs";
+import { buildPrompt, MODES } from "./lib/prompts.mjs";
+import * as geminiBackend from "./backends/gemini.mjs";
+import * as antigravityBackend from "./backends/antigravity.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// User project root = cwd where the user invoked Claude Code.
+// ---------- Backend registry ----------
+
+const BACKENDS = {
+  [geminiBackend.NAME]: geminiBackend,
+  [antigravityBackend.NAME]: antigravityBackend,
+};
+const BACKEND_NAMES = Object.keys(BACKENDS);
+const DEFAULT_BACKEND = "gemini";
+
+// ---------- Env vars (new + deprecated aliases) ----------
+
+// Read a new-style env var, falling back to a deprecated v0.5 alias.
+// Prints a one-time deprecation hint to stderr if the old name is used.
+const _seenDeprecations = new Set();
+function readEnv(newKey, oldKey) {
+  const newVal = process.env[newKey];
+  if (newVal !== undefined && newVal !== "") return newVal;
+  if (oldKey && process.env[oldKey] !== undefined && process.env[oldKey] !== "") {
+    if (!_seenDeprecations.has(oldKey)) {
+      _seenDeprecations.add(oldKey);
+      process.stderr.write(
+        `[openagent-bridge] note: ${oldKey} is deprecated; please rename to ${newKey} (still honored for now)\n`
+      );
+    }
+    return process.env[oldKey];
+  }
+  return undefined;
+}
+
+const ENV_PROJECT_ROOT = readEnv("OPENAGENT_BRIDGE_PROJECT_ROOT", "GEMINI_BRIDGE_PROJECT_ROOT");
+const ENV_OUTPUT_DIR = readEnv("OPENAGENT_BRIDGE_OUTPUT_DIR", "GEMINI_BRIDGE_OUTPUT_DIR");
+const ENV_FRONTMATTER_PRESET = readEnv("OPENAGENT_BRIDGE_FRONTMATTER_PRESET", "GEMINI_BRIDGE_FRONTMATTER_PRESET");
+const ENV_BACKEND = readEnv("OPENAGENT_BRIDGE_BACKEND", null);
+
+// User project root = cwd where the user invoked Claude Code / Codex CLI.
 // Baseline globs, --file paths, and output files are all resolved against this.
-// (The plugin itself lives elsewhere, accessed via ${CLAUDE_PLUGIN_ROOT}.)
-const PROJECT_ROOT = process.env.GEMINI_BRIDGE_PROJECT_ROOT
-  ? path.resolve(process.env.GEMINI_BRIDGE_PROJECT_ROOT)
+const PROJECT_ROOT = ENV_PROJECT_ROOT
+  ? path.resolve(ENV_PROJECT_ROOT)
   : process.cwd();
 
-// Env-var overrides let users pin project-wide defaults (e.g. in a YominOS
-// repo's .envrc) without passing the same flags every call. CLI flags still win.
-const ENV_FRONTMATTER_PRESET = process.env.GEMINI_BRIDGE_FRONTMATTER_PRESET;
-const ENV_OUTPUT_DIR = process.env.GEMINI_BRIDGE_OUTPUT_DIR;
-
 const DEFAULTS = {
-  // Gemini 3.1 Pro Preview — latest flagship as of 2026-04
-  // Fallback order: gemini-3.1-pro-preview > gemini-3-pro-preview > gemini-2.5-pro
-  model: "gemini-3.1-pro-preview",
+  // Resolved per-backend at parseArgs time (gemini-3.1-pro-preview for gemini, null for antigravity).
+  // The value here is just a fallback when --backend gemini is used without --model.
   timeoutSec: 180,
   researchTimeoutSec: 420,
   maxFiles: 40,
   maxFileBytes: 64_000,
   outputFormat: "text",
   // Default research output directory (relative to PROJECT_ROOT).
-  // Override priority: --output-dir flag > GEMINI_BRIDGE_OUTPUT_DIR env > this default.
+  // Override priority: --output-dir flag > OPENAGENT_BRIDGE_OUTPUT_DIR env > this default.
   researchOutputDir: ENV_OUTPUT_DIR || "gemini-research",
-  // Frontmatter preset. Override priority: --frontmatter-preset flag > GEMINI_BRIDGE_FRONTMATTER_PRESET env > "default".
+  // Frontmatter preset. Override priority: flag > env > "default".
   frontmatterPreset: (ENV_FRONTMATTER_PRESET === "yominos" || ENV_FRONTMATTER_PRESET === "default")
     ? ENV_FRONTMATTER_PRESET
     : "default",
+  // Backend selection. Override priority: --backend flag > OPENAGENT_BRIDGE_BACKEND env > DEFAULT_BACKEND.
+  backend: BACKEND_NAMES.includes(ENV_BACKEND) ? ENV_BACKEND : DEFAULT_BACKEND,
 };
 
 const BINARY_EXT = new Set([
@@ -61,19 +95,23 @@ const IGNORED_SEGMENTS = new Set([
   "archive", ".claude/plugins", "out",
 ]);
 
-const USAGE = `claude-gemini-bridge — Gemini Bridge
+const USAGE = `openagent-bridge — Multi-backend bridge to agent CLIs
 
 Usage:
-  node gemini-bridge.mjs --mode <ask|research|augment> [options] <task>
+  node bridge.mjs --mode <ask|research|augment> [--backend <name>] [options] <task>
 
 Modes:
   ask        Direct Q&A, stdout only
   research   Deep research on a topic, emits a structured markdown draft
   augment    Augment an existing markdown file with delta info
 
+Backends (--backend, default ${DEFAULTS.backend}):
+  gemini       Google Gemini CLI (stable)
+  antigravity  Google Antigravity language-server (experimental, v0.6)
+
 Common options:
   --task <text>              Task text (alternative to trailing args)
-  --model <name>             Gemini model (default: ${DEFAULTS.model})
+  --model <name>             Backend model (default: gemini → gemini-3.1-pro-preview; antigravity → backend default)
   --timeout <sec>            Timeout in seconds
   --plan                     Print the resolved prompt + command, do not execute
   --print-prompt             Print the full prompt to stderr before executing
@@ -98,18 +136,27 @@ Output:
   --no-output-file           Disable file writing (stdout only)
 
 Diagnostics:
-  --show-warnings            Print Gemini CLI stderr even on success (default: silent on success)
+  --show-warnings            Print backend stderr even on success (default: silent on success)
 
 Environment (project-wide defaults, CLI flags override):
-  GEMINI_BRIDGE_PROJECT_ROOT       Override project root (default: process.cwd())
-  GEMINI_BRIDGE_OUTPUT_DIR         Override research --output-dir (e.g. "know-how" for YominOS)
-  GEMINI_BRIDGE_FRONTMATTER_PRESET Override --frontmatter-preset ("default" | "yominos")
+  OPENAGENT_BRIDGE_BACKEND           Default --backend ("gemini" | "antigravity")
+  OPENAGENT_BRIDGE_PROJECT_ROOT      Override project root (default: process.cwd())
+  OPENAGENT_BRIDGE_OUTPUT_DIR        Override research --output-dir (e.g. "know-how" for YominOS)
+  OPENAGENT_BRIDGE_FRONTMATTER_PRESET Override --frontmatter-preset ("default" | "yominos")
+
+  (Deprecated v0.5 aliases still honored: GEMINI_BRIDGE_PROJECT_ROOT,
+   GEMINI_BRIDGE_OUTPUT_DIR, GEMINI_BRIDGE_FRONTMATTER_PRESET)
+
+Antigravity backend extras (--backend antigravity):
+  ANTIGRAVITY_LS                    Absolute path to antigravity LS binary (highest priority)
+  ANTIGRAVITY_HOME / _ROOT / _DIR   Install dir containing the antigravity binary
 
 Examples:
-  node gemini-bridge.mjs --mode ask "Amazon 2026 Q1 新政策"
-  node gemini-bridge.mjs --mode research --domain business "跨境电商 AI Agent 赛道"
-  node gemini-bridge.mjs --mode augment --file docs/amazon.md "补齐最近变化"
-  node gemini-bridge.mjs --mode ask --plan "test prompt"
+  node bridge.mjs --mode ask "Amazon 2026 Q1 新政策"
+  node bridge.mjs --mode research --domain business "跨境电商 AI Agent 赛道"
+  node bridge.mjs --mode augment --file docs/amazon.md "补齐最近变化"
+  node bridge.mjs --backend antigravity --mode ask "audit this repo"
+  node bridge.mjs --mode ask --plan "test prompt"
 `;
 
 // ---------- arg parsing ----------
@@ -138,7 +185,8 @@ export function parseArgs(argv) {
   const out = {
     mode: undefined,
     task: "",
-    model: DEFAULTS.model,
+    backend: DEFAULTS.backend,
+    model: undefined, // resolved after argv parse via backend.DEFAULT_MODEL
     timeoutSec: undefined,
     plan: false,
     printPrompt: false,
@@ -175,6 +223,15 @@ export function parseArgs(argv) {
           throw new Error(`Invalid --mode "${v}". Expected one of: ${MODES.join(", ")}`);
         }
         out.mode = v;
+        i += 1;
+        break;
+      }
+      case "--backend": {
+        const v = takeValue(argv, i, t);
+        if (!BACKEND_NAMES.includes(v)) {
+          throw new Error(`Invalid --backend "${v}". Expected one of: ${BACKEND_NAMES.join(", ")}`);
+        }
+        out.backend = v;
         i += 1;
         break;
       }
@@ -279,6 +336,11 @@ export function parseArgs(argv) {
     out.timeoutSec = out.mode === "research" ? DEFAULTS.researchTimeoutSec : DEFAULTS.timeoutSec;
   }
 
+  // Resolve model from backend default unless explicitly set via --model.
+  if (out.model === undefined) {
+    out.model = BACKENDS[out.backend].DEFAULT_MODEL;
+  }
+
   return out;
 }
 
@@ -354,13 +416,13 @@ async function collectFiles({ patterns, maxFiles, maxFileBytes }) {
   return { included, skipped };
 }
 
-// ---------- gemini invocation ----------
+// ---------- backend invocation ----------
 
-function runGemini({ args, timeoutSec }) {
+function runBackend(backend, { args, timeoutSec }) {
   return new Promise((resolve) => {
     // detached: true on POSIX so we get a new process group → can kill children too
     const usePosixGroup = process.platform !== "win32";
-    const child = spawn("gemini", args, {
+    const child = spawn(backend.BINARY, args, {
       cwd: PROJECT_ROOT,
       shell: false,
       detached: usePosixGroup,
@@ -402,7 +464,7 @@ function runGemini({ args, timeoutSec }) {
           stdout: Buffer.concat(out).toString("utf8"),
           stderr:
             Buffer.concat(err).toString("utf8") +
-            `\n[gemini-bridge] forced exit (child did not close after kill)\n`,
+            `\n[openagent-bridge] forced exit (child did not close after kill)\n`,
           error: null,
           timedOut: true,
         });
@@ -470,6 +532,8 @@ async function mainInner(argv) {
     }
   }
 
+  const backend = BACKENDS[parsed.backend];
+
   const prompt = buildPrompt({
     mode: parsed.mode,
     task: parsed.task,
@@ -479,19 +543,26 @@ async function mainInner(argv) {
     domain: parsed.domain,
     topic: parsed.topic,
     preset: parsed.frontmatterPreset,
+    backend: backend.NAME,
   });
 
-  const geminiArgs = ["-p", prompt, "-m", parsed.model, "--output-format", parsed.outputFormat];
+  const backendArgs = backend.buildArgs({
+    prompt,
+    model: parsed.model,
+    outputFormat: parsed.outputFormat,
+  });
 
   if (parsed.printPrompt) {
     process.stderr.write(`---PROMPT---\n${prompt}\n---END PROMPT---\n`);
   }
 
   if (parsed.plan) {
-    const rendered = ["gemini", ...geminiArgs.map((a) => (a === prompt ? "<PROMPT>" : JSON.stringify(a)))].join(" ");
+    const rendered = backend.renderPlanCommand?.(backendArgs, prompt)
+      || [backend.BINARY, ...backendArgs.map((a) => (a === prompt ? "<PROMPT>" : JSON.stringify(a)))].join(" ");
     process.stdout.write(`# DRY RUN (--plan)\n`);
+    process.stdout.write(`backend: ${backend.NAME} (${backend.LABEL})\n`);
     process.stdout.write(`mode: ${parsed.mode}\n`);
-    process.stdout.write(`model: ${parsed.model}\n`);
+    process.stdout.write(`model: ${parsed.model ?? "(backend default)"}\n`);
     process.stdout.write(`project root: ${PROJECT_ROOT}\n`);
     process.stdout.write(`timeout: ${parsed.timeoutSec}s\n`);
     process.stdout.write(`baseline files: ${baselineCtx.included.length} included, ${baselineCtx.skipped.length} skipped\n`);
@@ -501,12 +572,12 @@ async function mainInner(argv) {
     return 0;
   }
 
-  const result = await runGemini({ args: geminiArgs, timeoutSec: parsed.timeoutSec });
+  const result = await runBackend(backend, { args: backendArgs, timeoutSec: parsed.timeoutSec });
 
-  // ENOENT (gemini CLI missing) — diagnose and bail.
+  // ENOENT (backend CLI missing) — diagnose and bail.
   if (result.error && result.error.code === "ENOENT") {
     process.stderr.write(
-      "Gemini CLI not found. Install: npm install -g @google/gemini-cli (or: brew install gemini-cli)\n"
+      `${backend.LABEL} CLI not found (looked for "${backend.BINARY}"). ${backend.INSTALL_HINT}\n`
     );
     return 127;
   }
@@ -520,7 +591,7 @@ async function mainInner(argv) {
       process.stderr.write(trimmed + "\n");
     } else {
       process.stderr.write(
-        `[gemini-bridge] gemini emitted ${lineCount} stderr line(s); rerun with --show-warnings to view\n`
+        `[openagent-bridge:${parsed.backend}] ${lineCount} stderr line(s) emitted; rerun with --show-warnings to view\n`
       );
     }
   };
@@ -528,11 +599,11 @@ async function mainInner(argv) {
   // Timeout — exit early with 124 (GNU timeout convention).
   // Do NOT write the partial output to file: it's almost certainly incomplete or corrupt.
   if (result.timedOut) {
-    process.stderr.write(`\n[gemini-bridge] timeout after ${parsed.timeoutSec}s — output discarded (no file written)\n`);
+    process.stderr.write(`\n[openagent-bridge] timeout after ${parsed.timeoutSec}s — output discarded (no file written)\n`);
     emitStderr({ failed: true });
     if (result.stdout) {
       process.stdout.write(result.stdout);
-      process.stdout.write("\n[gemini-bridge] (partial output above; treated as failure)\n");
+      process.stdout.write("\n[openagent-bridge] (partial output above; treated as failure)\n");
     }
     return 124;
   }
@@ -569,9 +640,9 @@ async function mainInner(argv) {
     try {
       await writeOutputFile({ absPath: abs, content: body });
       process.stdout.write(body);
-      process.stdout.write(`\n\n---\n[gemini-bridge] wrote: ${path.relative(PROJECT_ROOT, abs)}\n`);
+      process.stdout.write(`\n\n---\n[openagent-bridge] wrote: ${path.relative(PROJECT_ROOT, abs)}\n`);
     } catch (err) {
-      process.stderr.write(`\n[gemini-bridge] failed to write ${outFile}: ${err.message}\n`);
+      process.stderr.write(`\n[openagent-bridge] failed to write ${outFile}: ${err.message}\n`);
       process.stdout.write(body);
       return 1;
     }
@@ -601,7 +672,7 @@ export function sanitizeBody(body, parsed) {
   if (/^[0-5]$/.test(aiValue)) return body; // valid
 
   process.stderr.write(
-    `[gemini-bridge] attention.ai was "${aiValue}" — not a valid 0-5 integer; falling back to 2\n`
+    `[openagent-bridge] attention.ai was "${aiValue}" — not a valid 0-5 integer; falling back to 2\n`
   );
   const fixedFmBlock = fmBlock.replace(/(^|\n)(\s*ai:\s*)([^\n]*)/, "$1$22");
   return body.replace(fmBlock, fixedFmBlock);
@@ -612,7 +683,7 @@ export async function main(argv = process.argv.slice(2)) {
     return await mainInner(argv);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`gemini-bridge error: ${msg}\n`);
+    process.stderr.write(`openagent-bridge error: ${msg}\n`);
     return 2;
   }
 }

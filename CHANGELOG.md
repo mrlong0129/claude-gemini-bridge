@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.6.0 — 2026-05-15
+
+**BREAKING (cosmetic): project rename + multi-backend refactor.**
+
+Google launched Antigravity 2.0 with its own `agy` CLI today. This release renames the project to reflect that it's no longer Gemini-only, and adds Antigravity as a second backend.
+
+- **Rename**: `claude-gemini-bridge` → `openagent-bridge`. GitHub auto-redirects the old URL.
+- **Plugin rename**: `gemini` → `bridge`. New install: `/plugin install bridge@openagent-bridge`. Old install path keeps working until you reinstall.
+- **Multi-backend architecture**:
+  - New `--backend <gemini|antigravity>` flag (default `gemini`)
+  - New env var `OPENAGENT_BRIDGE_BACKEND` for project-wide defaults
+  - Backend adapters live in `plugins/bridge/scripts/backends/<name>.mjs`
+- **New Antigravity backend (experimental)**:
+  - Discovers local Antigravity install via `ANTIGRAVITY_LS` / `ANTIGRAVITY_HOME` / `_ROOT` / `_DIR` env vars, then common install paths (`~/Antigravity`, `/opt/Antigravity`, `/Applications/Antigravity.app/Contents/Resources/app`, etc.)
+  - Spawns the `antigravity` language-server binary with `-cli -agent_mode -print` flags (per kaycke1337/antigravity-agent reverse-engineering)
+  - Note: `agy` itself is an IDE launcher without headless prompt API, hence the LS spawn pattern. Status is **experimental** in v0.6 — please report issues.
+- **New slash command `/antigravity`** mirrors `/gemini` with the Antigravity backend default.
+- **Env var rename** (with backward-compatible aliases): `GEMINI_BRIDGE_*` → `OPENAGENT_BRIDGE_*`. Old names still work and print a one-time deprecation hint.
+- **Log prefix rename**: `[gemini-bridge]` → `[openagent-bridge]` in all bridge stderr/stdout output.
+- **Internal refactor**: `runGemini` → `runBackend(backend, ...)`. ENOENT error now uses `backend.LABEL` + `backend.INSTALL_HINT`. All existing safety mechanisms (process-group kill, 7s fallback resolve, stderr collapse, frontmatter sanitizer, timeout exit 124) preserved.
+
+No behavior changes for happy-path Gemini users. Install path changes are the only thing existing v0.5 users need to do.
+
+Verified:
+- `--help` shows multi-backend usage ✓
+- `--plan` gemini backend: command renders as `gemini "-p" <PROMPT> ...` ✓
+- `--plan` antigravity backend: command renders as `antigravity "-cli" "-agent_mode" "-print" ...` ✓
+- Antigravity ENOENT (not installed) → exit 127 with full install hint ✓
+- Sanitizer 5/5 unit cases still pass against refactored bridge ✓
+- All existing CLI flags / env vars work unchanged ✓
+
 ## v0.5.0 — 2026-05-14
 
 Optimizations now that Codex sandbox v0.4.0 review confirmed all P0/P1 fixes are stable. Premise: users have Gemini CLI installed + authenticated locally.

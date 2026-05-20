@@ -1,0 +1,37 @@
+{
+  "name": "bridge",
+  "version": "0.6.0",
+  "description": "Use Gemini or Antigravity from Codex to research, augment knowledge, and search with citations.",
+  "author": {
+    "name": "mrlong0129",
+    "url": "https://github.com/mrlong0129"
+  },
+  "homepage": "https://github.com/mrlong0129/openagent-bridge",
+  "repository": "https://github.com/mrlong0129/openagent-bridge",
+  "license": "MIT",
+  "keywords": [
+    "gemini",
+    "antigravity",
+    "research",
+    "amazon",
+    "cross-border-ecommerce"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Openagent Bridge",
+    "shortDescription": "Bridge Codex to Gemini or Antigravity for research, citations, and knowledge-base tasks.",
+    "longDescription": "Multi-backend bridge that brings external agent CLIs (Google Gemini, Google Antigravity) into Codex. Three modes: ask (Q&A with sources), research (deep research → markdown draft), augment (delta-style updates to existing docs). Default backend is Gemini (stable, Google Search grounding); Antigravity backend is experimental and requires a local Antigravity install. Built for cross-border e-commerce / Amazon workflows — prompts preserve domain terminology (ACOS, ASIN, ROAS, BSR, AMC) and enforce source citations. Pairs with codex's own deep-code abilities: codex = depth × code, bridge = breadth × knowledge.",
+    "developerName": "mrlong0129",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Research the latest Amazon SP advertising algorithm changes",
+      "Augment docs/amazon-policy.md with new info",
+      "Find recent industry news about cross-border e-commerce AI agents"
+    ],
+    "websiteURL": "https://github.com/mrlong0129/openagent-bridge"
+  }
+}
