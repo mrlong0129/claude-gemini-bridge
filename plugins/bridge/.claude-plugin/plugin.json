@@ -1,6 +1,6 @@
 {
   "name": "bridge",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Use Gemini or Antigravity from Claude Code to research, augment knowledge, and search with citations.",
   "author": {
     "name": "mrlong0129"

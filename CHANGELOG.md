@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.6.1 — 2026-05-28
+
+**Fix: Antigravity backend now works on agy v1.0.1+ (Google Antigravity standalone CLI).**
+
+Google shipped `agy` v1.0.1 on 2026-05-23 as a self-contained standalone agentic CLI (Mach-O / Go binary, ~140 MB), replacing the original "IDE launcher + separate language-server binary" architecture that v0.6.0 was built against. The old `-cli -agent_mode -print --prompt` invocation now fails with `flags provided but not defined: -cli -agent_mode`.
+
+- **Fix `backends/antigravity.mjs` `buildArgs`**: now spawns `agy -p <prompt>` (agy v1.0.1+ headless print mode). Empirically verified on macOS arm64.
+- **Add `agy` to binary discovery**: `BINARY_NAMES = ["agy", "antigravity"]` searched in priority order. Existing `ANTIGRAVITY_LS` direct-path override still wins.
+- **Add `~/.local/bin` to default install dirs**: covers the official `curl -fsSL https://antigravity.google/cli/install.sh | bash` install location.
+- **Default fallback**: when no env/path discovery hits, `BINARY = "agy"` (was `"antigravity"`).
+
+Verified end-to-end on agy v1.0.1 / macOS arm64:
+- `ask` mode returns answers with real source URLs (advertising.amazon.com, anthropic.com, modelcontextprotocol.io, etc.) ✓
+- `research` mode writes YominOS-flavored frontmatter and full report with citations ✓
+- `augment` mode generates `.augmented.md` with delta analysis + ready-to-merge paragraphs ✓
+- `--plan` dry-run shows resolved binary path correctly ✓
+
+### ⚠️ Security note: `agy --sandbox` does NOT sandbox
+
+During testing, `agy --sandbox -p "cat ~/.ssh/id_rsa"` successfully read the real SSH private key (Base64 prefix matches the on-disk file exactly), then hallucinated that the data was "mock". The flag has no enforcement.
+
+Recommendation:
+- Do not rely on `--sandbox` for security boundaries
+- Scope agy's filesystem reach with `--add-dir` and OS-level permissions instead
+- If true sandboxing is needed, wrap agy in `sandbox-exec` (macOS) or a container
+
+This is an upstream agy issue, not a bridge issue. Reporting it to Google is recommended.
+
 ## v0.6.0 — 2026-05-15
 
 **BREAKING (cosmetic): project rename + multi-backend refactor.**

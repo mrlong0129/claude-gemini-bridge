@@ -1,16 +1,16 @@
-// Antigravity backend — wraps the local Antigravity language-server binary.
+// Antigravity backend — wraps the local `agy` Antigravity CLI.
 //
-// IMPORTANT: As of 2026-05-15, the `agy` CLI is a VS-Code-style IDE launcher
-// and has no `-p "prompt"`-style headless mode. The actual agent logic lives
-// in the Antigravity language-server binary (named `antigravity`), which is
-// invoked with `-cli -agent_mode -print [-enable_lsp -lsp_port <port>]`.
+// [YominOS patch 2026-05-28] As of agy v1.0.1 (May 23, 2026), agy is a
+// self-contained standalone agentic CLI with proper headless `-p / --print`
+// mode. The old assumption (agy is an IDE launcher needing -cli -agent_mode)
+// no longer holds — those flags are rejected by agy v1.0.1 with
+// "flags provided but not defined: -cli -agent_mode".
 //
-// This module discovers the local Antigravity install via the same env-var
-// priority that community wrappers (kaycke1337/antigravity-agent) use, then
-// spawns the LS in `-print` mode for stdout streaming.
+// This module discovers the local agy install via env-var priority + common
+// install dirs + extra YominOS path (~/.local/bin/agy), then spawns it with
+// the modern `-p <prompt>` CLI surface.
 //
-// Status: experimental. If your environment doesn't match the discovery rules
-// below, set ANTIGRAVITY_LS=/abs/path/to/antigravity explicitly.
+// Status: experimental but functionally validated on agy v1.0.1 / macOS arm64.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -34,12 +34,16 @@ const ENV_PATHS = [
 ];
 
 const COMMON_INSTALL_DIRS = [
+  path.join(HOME, ".local/bin"), // YominOS / curl-based install (agy binary directly here)
   path.join(HOME, "Antigravity"),
   path.join(HOME, ".local/share/Antigravity"),
   "/opt/Antigravity",
   // macOS .app bundle (Antigravity 2.0 desktop install)
   "/Applications/Antigravity.app/Contents/Resources/app",
 ];
+
+// Possible binary names — modern installs use "agy", legacy LSP-style use "antigravity"
+const BINARY_NAMES = ["agy", "antigravity"];
 
 function existsAsFile(p) {
   try {
@@ -49,8 +53,8 @@ function existsAsFile(p) {
   }
 }
 
-// Returns absolute path to antigravity binary, or null if not found via known
-// search rules. Returning null falls through to PATH lookup at spawn time.
+// Returns absolute path to antigravity/agy binary, or null if not found via
+// known search rules. Returning null falls through to PATH lookup at spawn time.
 export function discoverBinary() {
   for (const { key, kind } of ENV_PATHS) {
     const v = process.env[key];
@@ -59,27 +63,31 @@ export function discoverBinary() {
       if (existsAsFile(v)) return v;
       continue;
     }
-    const candidate = path.join(v, "antigravity");
-    if (existsAsFile(candidate)) return candidate;
+    for (const name of BINARY_NAMES) {
+      const candidate = path.join(v, name);
+      if (existsAsFile(candidate)) return candidate;
+    }
   }
   for (const dir of COMMON_INSTALL_DIRS) {
-    const candidate = path.join(dir, "antigravity");
-    if (existsAsFile(candidate)) return candidate;
+    for (const name of BINARY_NAMES) {
+      const candidate = path.join(dir, name);
+      if (existsAsFile(candidate)) return candidate;
+    }
   }
   return null;
 }
 
-// BINARY: absolute path if discovered, else "antigravity" (rely on PATH).
+// BINARY: absolute path if discovered, else "agy" (rely on PATH).
 // We resolve at import time so --plan shows the correct path.
-export const BINARY = discoverBinary() || "antigravity";
+export const BINARY = discoverBinary() || "agy";
 
 export function buildArgs({ prompt /* model and outputFormat are ignored */ }) {
-  // -cli         enable CLI mode (no IDE)
-  // -agent_mode  run as agent (not language-server-only)
-  // -print       stream agent output to stdout and exit
-  // --prompt     the task text (this is our best guess; may need to switch to
-  //              stdin if -print mode rejects --prompt)
-  return ["-cli", "-agent_mode", "-print", "--prompt", prompt];
+  // agy v1.0.1+ headless interface:
+  //   -p / --print / --prompt   Run a single prompt non-interactively, print to stdout
+  //   --print-timeout <dur>     Print mode timeout (default 5m)
+  //
+  // We pass the prompt as -p's value. Empirically tested 2026-05-28 on agy v1.0.1.
+  return ["-p", prompt];
 }
 
 export function renderPlanCommand(argv, prompt) {
